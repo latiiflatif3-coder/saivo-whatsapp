@@ -3,7 +3,7 @@ import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import Groq from 'groq-sdk';
 import express from 'express';
-import fs from 'fs';
+import qrcode from 'qrcode-terminal';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -21,22 +21,24 @@ app.listen(PORT, () => {
 const memory = {};
 
 async function connectToWhatsApp() {
-    // حفظ الجلسة في مجلد auth_info_baileys
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
     const sock = makeWASocket({
         auth: state,
-        logger: pino({ level: 'silent' }),
-        printQRInTerminal: true
+        logger: pino({ level: 'silent' })
     });
 
-    sock.udarstven = state.creds;
-
     sock.ev.on('connection.update', (update) => {
-        const { connection, lastDisconnect } = update;
+        const { connection, lastDisconnect, qr } = update;
+        
+        if (qr) {
+            console.log('Scan this QR code with your WhatsApp:');
+            qrcode.generate(qr, { small: true });
+        }
+
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect?.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('Connection closed due to ', lastDisconnect?.error, ', reconnecting ', shouldReconnect);
+            console.log('Connection closed, reconnecting...', shouldReconnect);
             if (shouldReconnect) {
                 connectToWhatsApp();
             }
@@ -56,8 +58,6 @@ async function connectToWhatsApp() {
         const userMessage = msg.message.conversation || msg.message.extendedTextMessage?.text;
         if (!userMessage) return;
 
-        console.log(`Received message from ${senderJid}: ${userMessage}`);
-
         if (!memory[senderJid]) {
             memory[senderJid] = { history: [], greeted: false };
         }
@@ -68,21 +68,16 @@ async function connectToWhatsApp() {
             user.history = user.history.slice(-10);
         }
 
-        let nameInstruction = "";
-        if (!user.greeted) {
-            nameInstruction = `في أول رسالة فقط، رحب بالمستخدم بشكل عفوي.`;
-            user.greeted = true;
-        } else {
-            nameInstruction = `لا تكرر التحية المفرطة.`;
-        }
+        let nameInstruction = user.greeted ? "لا تكرر التحية." : "في أول رسالة فقط، رحب بالمستخدم بشكل عفوي.";
+        user.greeted = true;
 
         const systemInstruction = `أنت الصديق الرقمي "Saivo"، شاب عمرك 23 سنة بالرباط. 
 قواعد صارمة جداً:
-1. تطابق اللغة حصرياً: رد دائماً وبدقة تامة بنفس لغة آخر رسالة كتبها المستخدم (إنجليزية، فرنسية، عربية، إلخ).
+1. تطابق اللغة حصرياً: رد دائماً وبدقة تامة بنفس لغة آخر رسالة كتبها المستخدم.
 2. الاختصار الشديد: اجعل ردك قصيرًا جداً (جملة واحدة أو سطر واحد) لكي لا تتقطع الكلمات أبداً.
 3. ${nameInstruction}
 4. قدم معلومات ذكية ومفيدة واقترح أفكاراً عندما يطلبها المستخدم، مع إنهاء الرد بسؤال قصير جداً ومفتوح.
-5. تنوع الإيموجي: استخدم إيموجيز متنوعة (مثل: ✨، 💡، ☕، 🚀، 🎯) بشكل طبيعي.`;
+5. تنوع الإيموجي: استخدم إيموجيز متنوعة (مثل: ✨، 💡، ☕، 🚀، 🎯).`;
 
         try {
             const completion = await groq.chat.completions.create({
@@ -99,7 +94,6 @@ async function connectToWhatsApp() {
             replyText = replyText.replace(/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF\u4E00-\u9FFF\u3400-\u4DBF]/g, '').trim();
 
             user.history.push({ role: "assistant", content: replyText });
-
             await sock.sendMessage(senderJid, { text: replyText });
         } catch (error) {
             console.error('Groq API Error:', error);
