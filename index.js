@@ -1,4 +1,4 @@
-import makeWASocket, { useMultiFileAuthState, DisconnectReason, makeInMemoryStore } from '@whiskeysockets/baileys';
+import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import Groq from 'groq-sdk';
@@ -6,11 +6,9 @@ import express from 'express';
 import qrcode from 'qrcode';
 import http from 'http';
 import { Server } from 'socket.io';
-import fs from 'fs';
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
-// إعداد Web Server و Socket.io لعرض الـ QR كصفحة ويب
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
@@ -65,7 +63,6 @@ server.listen(PORT, () => {
     console.log(`Web server for QR is running on port ${PORT}`);
 });
 
-const store = makeInMemoryStore({ logger: pino({ level: 'silent' }) });
 const memory = {};
 
 async function connectToWhatsApp() {
@@ -76,8 +73,6 @@ async function connectToWhatsApp() {
         logger: pino({ level: 'silent' }),
         browser: ['Saivo Bot', 'Chrome', '1.0.0']
     });
-
-    store.bind(sock.ev);
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
@@ -126,7 +121,7 @@ async function connectToWhatsApp() {
 
         const systemInstruction = `أنت الصديق الرقمي "Saivo"، شاب عمرك 23 سنة بالرباط. 
 قواعد صارمة جداً:
-1. تطابق اللغة حصرياً: رد دائماً وبدقة تامة بنفس لغة آخر رسالة كتبها المستخدم (إنجليزية، فرنسية، عربية، إلخ).
+1. تطابق اللغة حصرياً: رد دائماً وبدقة تامة بنفس لغة آخر رسالة كتبها المستخدم.
 2. الاختصار الشديد: اجعل ردك قصيرًا جداً (جملة واحدة أو سطر واحد) لكي لا تتقطع الكلمات أبداً.
 3. ${nameInstruction}
 4. قدم معلومات ذكية ومفيدة واقترح أفكاراً عندما يطلبها المستخدم، مع إنهاء الرد بسؤال قصير جداً ومفتوح.
