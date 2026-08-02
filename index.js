@@ -29,30 +29,15 @@ app.get('/', (req, res) => {
             </head>
             <body>
                 <h1>Scan QR Code to activate Saivo Bot</h1>
-                <p>Please wait, generating QR code...</p>
-                <div id="qr-container"><img id="qr-img" src="" alt="QR Code will appear here" width="300" height="300"></div>
+                <div id="qr-container"><img id="qr-img" src="" alt="QR Code" width="300" height="300"></div>
                 <div id="status">Connecting...</div>
                 <script>
                     const socket = io();
                     const qrImg = document.getElementById('qr-img');
                     const statusDiv = document.getElementById('status');
-
-                    socket.on('qr', (qrUrl) => {
-                        qrImg.src = qrUrl;
-                        statusDiv.innerText = 'Waiting for scan...';
-                        statusDiv.style.color = '#facc15';
-                    });
-
-                    socket.on('connected', () => {
-                        qrImg.style.display = 'none';
-                        statusDiv.innerText = '✅ Bot Connected Successfully!';
-                        statusDiv.style.color = '#22c55e';
-                    });
-
-                    socket.on('disconnected', () => {
-                        statusDiv.innerText = '🔴 Bot Disconnected. Restarting...';
-                        statusDiv.style.color = '#ef4444';
-                    });
+                    socket.on('qr', (qrUrl) => { qrImg.src = qrUrl; statusDiv.innerText = 'Scan this QR'; });
+                    socket.on('connected', () => { qrImg.style.display = 'none'; statusDiv.innerText = '✅ Connected!'; statusDiv.style.color = '#22c55e'; });
+                    socket.on('disconnected', () => { statusDiv.innerText = '🔴 Disconnected'; statusDiv.style.color = '#ef4444'; });
                 </script>
             </body>
         </html>
@@ -60,7 +45,7 @@ app.get('/', (req, res) => {
 });
 
 server.listen(PORT, () => {
-    console.log(`Web server for QR is running on port ${PORT}`);
+    console.log(`Web server running on port ${PORT}`);
 });
 
 const memory = {};
@@ -76,21 +61,16 @@ async function connectToWhatsApp() {
 
     sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
-
         if (qr) {
-            console.log('QR code generated, sending to web interface...');
+            console.log('QR Generated');
             io.emit('qr', await qrcode.toDataURL(qr));
         }
-
         if (connection === 'close') {
             const shouldReconnect = (lastDisconnect?.error instanceof Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
-            console.log('Connection closed, reconnecting...', shouldReconnect);
             io.emit('disconnected');
-            if (shouldReconnect) {
-                connectToWhatsApp();
-            }
+            if (shouldReconnect) connectToWhatsApp();
         } else if (connection === 'open') {
-            console.log('Bot connected to WhatsApp successfully!');
+            console.log('Bot Connected to WhatsApp!');
             io.emit('connected');
         }
     });
@@ -104,47 +84,33 @@ async function connectToWhatsApp() {
 
         const senderJid = msg.key.remoteJid;
         const userMessage = msg.message.conversation || msg.message.extendedTextMessage?.text;
+        
+        console.log(`📥 Received message from ${senderJid}: "${userMessage}"`);
         if (!userMessage) return;
 
         if (!memory[senderJid]) {
-            memory[senderJid] = { history: [], greeted: false };
+            memory[senderJid] = { history: [] };
         }
         const user = memory[senderJid];
-
         user.history.push({ role: "user", content: userMessage });
-        if (user.history.length > 10) {
-            user.history = user.history.slice(-10);
-        }
-
-        let nameInstruction = user.greeted ? "لا تكرر التحية المفرطة." : "في أول رسالة فقط، رحب بالمستخدم بشكل عفوي.";
-        user.greeted = true;
-
-        const systemInstruction = `أنت الصديق الرقمي "Saivo"، شاب عمرك 23 سنة بالرباط. 
-قواعد صارمة جداً:
-1. تطابق اللغة حصرياً: رد دائماً وبدقة تامة بنفس لغة آخر رسالة كتبها المستخدم.
-2. الاختصار الشديد: اجعل ردك قصيرًا جداً (جملة واحدة أو سطر واحد) لكي لا تتقطع الكلمات أبداً.
-3. ${nameInstruction}
-4. قدم معلومات ذكية ومفيدة واقترح أفكاراً عندما يطلبها المستخدم، مع إنهاء الرد بسؤال قصير جداً ومفتوح.
-5. تنوع الإيموجي: استخدم إيموجيز متنوعة (مثل: ✨، 💡، ☕، 🚀، 🎯) بشكل طبيعي ولائق.`;
 
         try {
             const completion = await groq.chat.completions.create({
                 messages: [
-                    { role: "system", content: systemInstruction },
+                    { role: "system", content: "أنت الصديق الرقمي Saivo، رد باختصار شديد وبلغة المستخدم مع إيموجي لطيف." },
                     ...user.history
                 ],
                 model: "llama-3.3-70b-versatile",
-                max_tokens: 55,
-                temperature: 0.7,
+                max_tokens: 50,
             });
 
-            let replyText = completion.choices[0]?.message?.content || "I'm listening 💡";
-            replyText = replyText.replace(/[\u1100-\u11FF\u3130-\u318F\uAC00-\uD7AF\u4E00-\u9FFF\u3400-\u4DBF]/g, '').trim();
-
+            let replyText = completion.choices[0]?.message?.content || "هلا بيك 💡";
             user.history.push({ role: "assistant", content: replyText });
+            
             await sock.sendMessage(senderJid, { text: replyText });
+            console.log(`📤 Replied successfully to ${senderJid}`);
         } catch (error) {
-            console.error('Groq API Error:', error);
+            console.error('❌ Error in AI or Sending:', error);
         }
     });
 }
