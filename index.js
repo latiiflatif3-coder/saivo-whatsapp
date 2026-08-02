@@ -3,7 +3,7 @@ import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import Groq from 'groq-sdk';
 import express from 'express';
-import qrcode from 'qrcode-terminal';
+import qrcode from 'qrcode'; // استبدلنا مكتبة terminal بمكتبة qrcode العادية
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
@@ -28,12 +28,13 @@ async function connectToWhatsApp() {
         logger: pino({ level: 'silent' })
     });
 
-    sock.ev.on('connection.update', (update) => {
+    sock.ev.on('connection.update', async (update) => {
         const { connection, lastDisconnect, qr } = update;
         
         if (qr) {
-            console.log('Scan this QR code with your WhatsApp:');
-            qrcode.generate(qr, { small: true });
+            console.log('--- SCAN THIS QR CODE ---');
+            // سيقوم بطباعة رابط QR كصورة في اللوغات لسهولة فتحه ومسحه
+            console.log(await qrcode.toString(qr, { type: 'terminal', small: true }));
         }
 
         if (connection === 'close') {
