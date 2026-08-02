@@ -11,6 +11,6 @@
     "express": "^4.19.2",
     "groq-sdk": "^0.7.0",
     "pino": "^9.0.0",
-    "qrcode": "^1.5.3"
+    "qrcode-terminal": "^0.12.0"
   }
 }
