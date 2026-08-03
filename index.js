@@ -18,7 +18,7 @@ app.get('/', (req, res) => {
     res.send(`
         <html>
             <head>
-                <title>WhatsApp Saivo Bot - QR Scanner</title>
+                <title>WhatsApp Business Saivo Bot - QR Scanner</title>
                 <script src="/socket.io/socket.io.js"></script>
                 <style>
                     body { font-family: sans-serif; text-align: center; background: #111; color: #eee; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
@@ -28,7 +28,7 @@ app.get('/', (req, res) => {
                 </style>
             </head>
             <body>
-                <h1>Scan QR Code to activate Saivo Bot</h1>
+                <h1>Scan QR Code to activate WhatsApp Business Saivo Bot</h1>
                 <div id="qr-container"><img id="qr-img" src="" alt="QR Code" width="300" height="300"></div>
                 <div id="status">Connecting...</div>
                 <script>
@@ -50,7 +50,6 @@ server.listen(PORT, () => {
 
 const memory = {};
 
-// دالة مساعدة لإحداث تأخير زمني (بالمللي ثانية)
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function connectToWhatsApp() {
@@ -59,7 +58,7 @@ async function connectToWhatsApp() {
     const sock = makeWASocket({
         auth: state,
         logger: pino({ level: 'silent' }),
-        browser: ['Saivo Bot', 'Chrome', '1.0.0']
+        browser: ['Saivo Business Bot', 'Chrome', '1.0.0']
     });
 
     sock.ev.on('connection.update', async (update) => {
@@ -73,7 +72,7 @@ async function connectToWhatsApp() {
             io.emit('disconnected');
             if (shouldReconnect) connectToWhatsApp();
         } else if (connection === 'open') {
-            console.log('Bot Connected to WhatsApp!');
+            console.log('Bot Connected to WhatsApp Business!');
             io.emit('connected');
         }
     });
@@ -98,12 +97,10 @@ async function connectToWhatsApp() {
         user.history.push({ role: "user", content: userMessage });
 
         try {
-            // محاكاة حالة "جاري الكتابة..." (Typing) لتبدو طبيعية أكثر
             await sock.presenceSubscribe(senderJid);
             await delay(500);
             await sock.sendPresenceUpdate('composing', senderJid);
 
-            // استدعاء ذكاء Groq
             const completion = await groq.chat.completions.create({
                 messages: [
                     { role: "system", content: "أنت الصديق الرقمي Saivo، رد باختصار شديد وبلغة المستخدم مع إيموجي لطيف." },
@@ -116,7 +113,6 @@ async function connectToWhatsApp() {
             let replyText = completion.choices[0]?.message?.content || "هلا بيك 💡";
             user.history.push({ role: "assistant", content: replyText });
             
-            // تأخير زمني إضافي (مثلاً 2 ثواني) قبل إرسال الرد الفعلي لكي لا يبدو البوت كأنه آلة فورية
             await delay(2000);
 
             await sock.sendMessage(senderJid, { text: replyText });
