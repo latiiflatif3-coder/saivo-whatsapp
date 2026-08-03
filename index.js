@@ -50,6 +50,9 @@ server.listen(PORT, () => {
 
 const memory = {};
 
+// دالة مساعدة لإحداث تأخير زمني (بالمللي ثانية)
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function connectToWhatsApp() {
     const { state, saveCreds } = await useMultiFileAuthState('auth_info_baileys');
 
@@ -95,6 +98,12 @@ async function connectToWhatsApp() {
         user.history.push({ role: "user", content: userMessage });
 
         try {
+            // محاكاة حالة "جاري الكتابة..." (Typing) لتبدو طبيعية أكثر
+            await sock.presenceSubscribe(senderJid);
+            await delay(500);
+            await sock.sendPresenceUpdate('composing', senderJid);
+
+            // استدعاء ذكاء Groq
             const completion = await groq.chat.completions.create({
                 messages: [
                     { role: "system", content: "أنت الصديق الرقمي Saivo، رد باختصار شديد وبلغة المستخدم مع إيموجي لطيف." },
@@ -107,7 +116,11 @@ async function connectToWhatsApp() {
             let replyText = completion.choices[0]?.message?.content || "هلا بيك 💡";
             user.history.push({ role: "assistant", content: replyText });
             
+            // تأخير زمني إضافي (مثلاً 2 ثواني) قبل إرسال الرد الفعلي لكي لا يبدو البوت كأنه آلة فورية
+            await delay(2000);
+
             await sock.sendMessage(senderJid, { text: replyText });
+            await sock.sendPresenceUpdate('paused', senderJid);
             console.log(`📤 Replied successfully to ${senderJid}`);
         } catch (error) {
             console.error('❌ Error in AI or Sending:', error);
